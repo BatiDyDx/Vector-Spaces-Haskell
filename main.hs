@@ -7,7 +7,7 @@ data NdTree p = Node (NdTree p) -- subarbol izquierdo
                 | Empty
                 deriving (Eq, Ord, Show)
 
-class Punto p where
+class Eq p => Punto p where
   dimension :: p -> Int -- devuelve el n ́umero de coordenadas de un punto
   coord :: Int -> p -> Double -- devuelve la coordenada k-esima de un punto (comenzando de 0)
   
@@ -44,7 +44,7 @@ qsort _ [] = []
 qsort _ [x] = [x]
 qsort f (x:xs) = left ++ [x] ++ right
                 where
-                  left = qsort f [y | y <- xs, f y <= f x] --
+                  left = qsort f [y | y <- xs, f y <= f x]
                   right = qsort f [y | y <- xs, f y > f x]
 
 median :: [a] -> Int -> a
@@ -54,7 +54,7 @@ median xs n | even n = xs !! (n `div` 2)
 nextAxis :: Axis -> Int -> Axis
 nextAxis axis dimension = (axis + 1) `mod` dimension
 
-makeNdTree :: (Eq p, Punto p) => [p] -> Axis -> Int -> NdTree p
+makeNdTree :: Punto p => [p] -> Axis -> Int -> NdTree p
 makeNdTree [] _  _ = Empty
 makeNdTree xs axis n = Node l x r axis
                   where
@@ -65,22 +65,22 @@ makeNdTree xs axis n = Node l x r axis
                     l = makeNdTree [y | y <- xs, coord axis y <= coord axis x, y /= x] naxis leftn
                     r = makeNdTree [y | y <- xs, coord axis y > coord axis x] naxis rightn
 
-fromList :: (Eq p, Punto p) => [p] -> NdTree p
+fromList :: Punto p => [p] -> NdTree p
 fromList xs = makeNdTree xs 0 (length xs)
 
-insertar :: (Eq p, Punto p) => p -> NdTree p -> NdTree p
+insertar :: Punto p => p -> NdTree p -> NdTree p
 insertar x Empty = Node Empty x Empty 0
-insertar x t@(Node l y r axis)| coord axis x <= coord axis y = 
-                                  if x /= y 
-                                    then
-                                      case l of
-                                        Empty -> (Node (Node Empty x Empty (nextAxis axis (dimension x))) y r axis) 
-                                        _     ->  (Node (insertar x l) y r axis)
-                                    else t
-                                | xi > yi = 
-                                  case r of
-                                    Empty -> (Node l y (Node Empty x Empty (nextAxis axis (dimension x))) axis) 
-                                    _     -> (Node l x (insertar x r) axis) 
-                                where 
-                                  xi = coord axis x
-                                  yi = coord axis y
+insertar x t@(Node l y r axis)
+            | coord axis x <= coord axis y = 
+              if x /= y 
+                then
+                  case l of
+                    Empty -> (Node (Node Empty x Empty (nextAxis axis (dimension x))) y r axis) 
+                    _     -> (Node (insertar x l) y r axis)
+                else t
+            | coord axis x > coord axis y = 
+              case r of
+                Empty -> (Node l y (Node Empty x Empty (nextAxis axis (dimension x))) axis) 
+                _     -> (Node l x (insertar x r) axis) 
+
+
