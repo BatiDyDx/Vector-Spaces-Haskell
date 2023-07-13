@@ -14,7 +14,7 @@ data NdTree p = Node (NdTree p) -- subarbol izquierdo
 class Punto p where
   dimension :: p -> Int -- devuelve el numero de coordenadas de un punto
   coord :: Axis -> p -> Double -- devuelve la coordenada k-esima de un punto (comenzando de 0)
-  
+
   dist :: p -> p -> Double -- calcula la distancia entre dos puntos
   dist x y = sum [((coord i x) - (coord i y)) ^ 2 | i <- [0..n]]
             where n = (dimension x) - 1
@@ -50,59 +50,58 @@ qsort f (x:xs) = left ++ [x] ++ right
 
 -- Devuelve la mediana de una lista ordenada, en caso
 -- de tener longitud par, devuelve el de centro derecha
-median :: [a] -> Int -> a
-median xs n | even n = xs !! (n `div` 2)
-            | otherwise = xs !! ((n - 1) `div` 2)
+median :: Punto p => Axis -> [p] -> p
+median axis xs = let n = length xs `div` 2
+                     xs' = qsort (coord axis) xs
+                 in xs' !! n
 
 nextAxis :: Axis -> Int -> Axis
 nextAxis axis dimension = (axis + 1) `mod` dimension
 
 -- Crea un arbol NdTree a partir de una lista de puntos, un eje dado
--- y la longitud de la lista
--- Se pasa la longitud de la lista para evitar calcularla en cada llamado
-makeNdTree :: (Eq p, Punto p) => [p] -> Axis -> Int -> NdTree p
-makeNdTree [] _  _ = Empty
-makeNdTree xs axis n = Node l x r axis
-                  where
-                    x = median (qsort (coord axis) xs) n -- Elemento del medio, segun coordenada axis
+makeNdTree :: (Eq p, Punto p) => [p] -> Axis -> NdTree p
+makeNdTree [] _  = Empty
+makeNdTree xs axis = Node l x r axis
+                where
+                    x = median axis xs -- Elemento del medio, segun coordenada axis
                     naxis = nextAxis axis (dimension x) -- Eje del proximo nivel del arbol
-                    (leftn, rightn) = if even n then (div n 2, (div n 2) - 1)
-                                                else (div (n - 1) 2, div (n - 1) 2)
-                    l = makeNdTree [y | y <- xs, coord axis y <= coord axis x, y /= x] naxis leftn -- Creacion recursiva de subarbol izq
-                    r = makeNdTree [y | y <- xs, coord axis y > coord axis x] naxis rightn -- Creacion recursiva de subarbol izq
+                    l = makeNdTree [y | y <- xs, coord axis y <= coord axis x, y /= x] naxis -- Creacion recursiva de subarbol izq
+                    r = makeNdTree [y | y <- xs, coord axis y > coord axis x] naxis  -- Creacion recursiva de subarbol izq
 
 -- Crea un NdTree dada una lista de puntos
 fromList :: (Eq p, Punto p) => [p] -> NdTree p
-fromList xs = makeNdTree xs 0 (length xs)
+fromList xs = makeNdTree xs 0
 
 -- Inserta un punto en un NdTree conservando el invariante de NdTree
 insertar :: (Eq p, Punto p) => p -> NdTree p -> NdTree p
 insertar x Empty = Node Empty x Empty 0
 insertar x t@(Node l y r axis)
-            | coord axis x <= coord axis y = if x /= y 
+            | coord axis x <= coord axis y = if x /= y
               then
                 case l of
-                  Empty -> (Node (Node Empty x Empty (nextAxis axis (dimension x))) y r axis) -- Se agrega el nodo en una hoja 
+                  Empty -> (Node (Node Empty x Empty (nextAxis axis (dimension x))) y r axis) -- Se agrega el nodo en una hoja
                   _     -> (Node (insertar x l) y r axis) -- Se inserta recursivamente a izquierda
               else t -- Si el punto ya esta, no se inserta
-            | coord axis x > coord axis y = 
+            | coord axis x > coord axis y =
               case r of
                 Empty -> (Node l y (Node Empty x Empty (nextAxis axis (dimension x))) axis) -- Se agrega el nodo en una hoja
                 _     -> (Node l x (insertar x r) axis) -- Se inserta recursivamente a derecha
 
 -- Consigue el punto con menor coordenada segun el eje especificado
 minimumNd :: Punto p => NdTree p -> Axis -> p
-minimumNd (Node Empty y Empty axis) _ = y
-minimumNd (Node l y r axis) eje | axis == eje = minimumNd l eje -- Sabemos que el minimo se encuentra a izquierda
-                                | otherwise = let (x,y) = (minimumNd l eje, minimumNd r eje)
-                                              in if (coord eje x) <= (coord eje y) then x else y -- El minimo puede estar en cualquier subarbol
+minimumNd (Node Empty y Empty _) _ = y
+minimumNd (Node l p r ax) axis | ax == axis = minimumNd l axis -- Sabemos que el minimo se encuentra a izquierda
+                               | otherwise = let (x,y) = (minimumNd l axis, minimumNd r axis)
+                                                 z = if (coord axis x) <= (coord axis y) then x else y -- El minimo entre los dos subarboles
+                                             in if (coord axis z) <= (coord axis p) then z else p
 
 -- Consigue el punto con mayor coordenada segun el eje especificado
 maximumNd :: Punto p => NdTree p -> Axis -> p
-maximumNd (Node Empty y Empty axis) _ = y
-maximumNd (Node l y r axis) eje | axis == eje = maximumNd r eje -- Sabemos que el minimo se encuentra a derecha
-                                | otherwise = let (x,y) = (maximumNd l eje, maximumNd r eje)
-                                              in if (coord eje x) >= (coord eje y) then x else y -- El maximo puede estar en cualquier subarbol
+maximumNd (Node Empty y Empty _) _ = y
+maximumNd (Node l p r ax) axis | ax == axis = maximumNd r axis -- Sabemos que el minimo se encuentra a derecha
+                               | otherwise = let (x,y) = (maximumNd l axis, maximumNd r axis)
+                                                 z = if (coord axis x) >= (coord axis y) then x else y -- El maximo entre los dos subarboles
+                                             in if (coord axis z) >= (coord axis p) then z else p
 
 -- Elimina un punto del arbol conservando el invariante de NdTree
 -- Prioriza la eliminacion recursiva a derecha si es posible
@@ -111,7 +110,8 @@ eliminar _ Empty = Empty
 eliminar x t@(Node Empty y Empty axis) | x == y = Empty
                                        | otherwise = t
 eliminar x t@(Node l y r axis)
-        | x /= y = if (coord axis x) <= (coord axis y) then (Node (eliminar x l) y r axis)
+        | x /= y = if (coord axis x) <= (coord axis y)
+                   then (Node (eliminar x l) y r axis)
                    else (Node l y (eliminar x r) axis) -- Se elimina recursivamente a izq o derecha segun corresponde
         | otherwise = case r of -- Si se encuentra el nodo
                         Empty -> let max = maximumNd l axis -- Caso en que no hay derecho, se reemplaza por el nodo con
@@ -120,7 +120,6 @@ eliminar x t@(Node l y r axis)
                         _ ->     let min = minimumNd r axis -- Caso en que hay derecho, se reemplaza por el nodo con
                                      r' = eliminar min r    -- el minimo a derecha, y este se elimina recursivamente
                                  in (Node l min r' axis)
-
 
 -- IMPLEMENTACION DE EJERCICIO 5 PARA N DIMENSIONES
 
@@ -151,10 +150,10 @@ ortogonalNSearch :: Punto p => NdTree p -> NPrism p -> [p]
 ortogonalNSearch Empty _ = []
 ortogonalNSearch (Node l p r axis) prism =
         let ps = if inNRegion p prism then [p] else [] -- Si el punto se encuentra en el prisma lo agrega, sino no
-            ls = if (discardIfLower p prism axis) 
+            ls = if (discardIfLower p prism axis)
                  then [] -- si es menor, descarta el subarbol izquierdo
                  else ortogonalNSearch l prism -- sino, busca recursivamente en el subarbol izquierdo
-            rs = if (discardIfGreater p prism axis) 
+            rs = if (discardIfGreater p prism axis)
                  then [] -- si es mayor, descarta el subarbol derecho
                  else ortogonalNSearch r prism -- sino, busca recursivamente en el subarbol derecho
         in ps ++ rs ++ ls
